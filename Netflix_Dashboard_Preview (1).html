@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Netflix Content Dashboard</title>
+<style>
+:root{--bg:#141414;--card:#221f1f;--red:#e50914;--dred:#b20710;--txt:#f5f5f1;--mut:#9a9a9a;--line:#333}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font-family:Segoe UI,Arial,sans-serif;padding:16px}
+h1{margin:0 0 4px;font-size:22px;color:var(--red);letter-spacing:1px}
+.sub{color:var(--mut);font-size:12px;margin-bottom:12px}
+.filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.chip{padding:6px 14px;border-radius:20px;background:var(--card);border:1px solid var(--line);cursor:pointer;font-size:13px;color:var(--txt)}
+.chip.on{background:var(--red);border-color:var(--red)}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
+.kpi{background:var(--card);border-radius:8px;padding:12px;border-left:4px solid var(--red)}
+.kpi b{display:block;font-size:24px}.kpi span{font-size:11px;color:var(--mut);text-transform:uppercase}
+.grid{display:grid;grid-template-columns:1.5fr 1fr 1.2fr;gap:10px}
+.card{background:var(--card);border-radius:8px;padding:12px}
+.card h3{margin:0 0 8px;font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px}
+.wide{grid-column:1/-1}
+.row{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
+.row .n{width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .bar{flex:1;background:#333;height:14px;border-radius:3px;overflow:hidden}
+.row .bar i{display:block;height:100%;background:var(--red)}
+.row .v{width:44px;text-align:right;color:var(--mut)}
+.note{font-size:11px;color:var(--mut);margin-top:10px}
+svg text{fill:#bbb;font-size:10px}
+.tip{position:fixed;background:#000;border:1px solid var(--red);padding:4px 8px;font-size:12px;border-radius:4px;pointer-events:none;display:none}
+@media(max-width:800px){.kpis{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+</style></head><body>
+<h1>NETFLIX CONTENT DASHBOARD</h1>
+<div class="sub">Preview of the Power BI report layout. Figures are approximate, based on the public Kaggle netflix_titles dataset; replace with your own refresh.</div>
+<div class="filters" id="filters"></div>
+<div class="kpis" id="kpis"></div>
+<div class="grid">
+  <div class="card"><h3>Titles by Country (map)</h3><svg id="map" viewBox="0 0 360 190" width="100%"></svg></div>
+  <div class="card"><h3>Movies vs TV Shows</h3><svg id="donut" viewBox="0 0 200 190" width="100%"></svg></div>
+  <div class="card"><h3>Top Genres</h3><div id="genres"></div></div>
+  <div class="card wide"><h3>Titles Added per Year</h3><svg id="trend" viewBox="0 0 700 170" width="100%"></svg></div>
+  <div class="card wide"><h3>Top 8 Countries / Ratings</h3><div style="display:grid;grid-template-columns:1fr 1fr;gap:20px"><div id="countries"></div><div id="ratings"></div></div></div>
+</div>
+<div class="note">Built with: Power Query (ETL) → relational model (Dim_Date, Dim_Country, Dim_Genre + bridges) → DAX measures → visuals.</div>
+<div class="tip" id="tip"></div>
+<script>
+const D={
+ all:{movies:6131,tv:2676,countries:748,minutes:100,years:{2014:25,2015:82,2016:429,2017:1188,2018:1649,2019:2016,2020:1879,2021:1498}},
+ movie:{movies:6131,tv:0,countries:690,minutes:100,years:{2014:19,2015:56,2016:264,2017:864,2018:1237,2019:1424,2020:1284,2021:993}},
+ tv:{movies:0,tv:2676,countries:410,minutes:0,years:{2014:6,2015:26,2016:165,2017:324,2018:412,2019:592,2020:595,2021:505}}
+};
+const countries=[["United States",2818,-98,39],["India",972,78,22],["United Kingdom",419,-2,54],["Japan",245,138,36],["South Korea",199,127,36],["Canada",181,-100,57],["Spain",145,-4,40],["France",124,2,46],["Mexico",110,-102,23],["Egypt",106,30,27],["Turkey",105,35,39],["Nigeria",95,8,9],["Australia",90,134,-25],["Brazil",85,-52,-10],["Germany",85,10,51]];
+const genres=[["International Movies",2752],["Dramas",2427],["Comedies",1674],["International TV Shows",1351],["Documentaries",869],["Action & Adventure",859],["TV Dramas",763],["Independent Movies",756]];
+const ratings=[["TV-MA",3207],["TV-14",2160],["TV-PG",863],["R",799],["PG-13",490],["TV-Y7",334]];
+let f="all";
+const fmt=n=>n.toLocaleString();
+function render(){
+ const d=D[f],tot=d.movies+d.tv,sc=tot/8807;
+ document.getElementById("kpis").innerHTML=[["Total Titles",fmt(tot)],["Movies",fmt(d.movies)],["TV Shows",fmt(d.tv)],["Countries",d.countries],["Avg Movie Min",d.minutes?d.minutes:"n/a"]].map(k=>`<div class="kpi"><span>${k[0]}</span><b>${k[1]}</b></div>`).join("");
+ // map
+ let m='<rect width="360" height="190" fill="#1a1a1a" rx="4"/>';
+ for(let lo=-180;lo<=180;lo+=60){const x=(lo+180)*360/360;m+=`<line x1="${x}" y1="0" x2="${x}" y2="190" stroke="#2c2c2c"/>`}
+ for(let la=-60;la<=60;la+=30){const y=(90-la)*190/180;m+=`<line x1="0" y1="${y}" x2="360" y2="${y}" stroke="#2c2c2c"/>`}
+ countries.forEach(c=>{const x=(c[2]+180),y=(90-c[3])*190/180,v=Math.round(c[1]*sc),r=Math.max(3,Math.sqrt(v)/2.2);
+  m+=`<circle cx="${x}" cy="${y}" r="${r}" fill="#e50914" fill-opacity=".55" stroke="#e50914" data-t="${c[0]}: ${fmt(v)}"/>`});
+ document.getElementById("map").innerHTML=m;
+ // donut
+ const a=d.movies/tot||0,R=60,C=2*Math.PI*R;
+ document.getElementById("donut").innerHTML=`<g transform="translate(100,85) rotate(-90)"><circle r="${R}" fill="none" stroke="#564d4d" stroke-width="26"/><circle r="${R}" fill="none" stroke="#e50914" stroke-width="26" stroke-dasharray="${a*C} ${C}"/></g>
+ <text x="100" y="82" text-anchor="middle" style="font-size:20px;fill:#fff;font-weight:bold">${Math.round(a*100)}%</text><text x="100" y="98" text-anchor="middle">Movies</text>
+ <rect x="30" y="170" width="10" height="10" fill="#e50914"/><text x="44" y="179">Movie</text><rect x="110" y="170" width="10" height="10" fill="#564d4d"/><text x="124" y="179">TV Show</text>`;
+ const bars=(arr,el)=>{const mx=arr[0][1];document.getElementById(el).innerHTML=arr.map(g=>{const v=Math.round(g[1]*sc);return `<div class="row"><div class="n" title="${g[0]}">${g[0]}</div><div class="bar"><i style="width:${g[1]/mx*100}%"></i></div><div class="v">${fmt(v)}</div></div>`}).join("")};
+ bars(genres,"genres");bars(countries.slice(0,8).map(c=>[c[0],c[1]]),"countries");bars(ratings,"ratings");
+ // trend
+ const ys=Object.keys(d.years),vs=Object.values(d.years),mx=Math.max(...vs)*1.1,W=700,H=150;
+ const pts=ys.map((y,i)=>[40+i*(W-60)/(ys.length-1),H-vs[i]/mx*(H-20)]);
+ let t=`<path d="M${pts.map(p=>p.join(",")).join(" L")} L${pts[pts.length-1][0]},${H} L${pts[0][0]},${H}Z" fill="#e50914" fill-opacity=".2"/><path d="M${pts.map(p=>p.join(",")).join(" L")}" fill="none" stroke="#e50914" stroke-width="2.5"/>`;
+ pts.forEach((p,i)=>{t+=`<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#e50914" data-t="${ys[i]}: ${fmt(vs[i])}"/><text x="${p[0]}" y="${H+14}" text-anchor="middle">${ys[i]}</text>`});
+ document.getElementById("trend").innerHTML=t;
+}
+document.getElementById("filters").innerHTML=[["all","All"],["movie","Movies"],["tv","TV Shows"]].map(x=>`<div class="chip ${x[0]=="all"?"on":""}" data-f="${x[0]}">${x[1]}</div>`).join("");
+document.getElementById("filters").onclick=e=>{const c=e.target.closest(".chip");if(!c)return;f=c.dataset.f;document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x==c));render()};
+const tip=document.getElementById("tip");
+document.addEventListener("mousemove",e=>{const t=e.target.dataset&&e.target.dataset.t;if(t){tip.style.display="block";tip.textContent=t;tip.style.left=e.clientX+12+"px";tip.style.top=e.clientY+12+"px"}else tip.style.display="none"});
+render();
+</script></body></html>
